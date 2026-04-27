@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Telemetry Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #111217;
+            --card-bg: #181b1f;
+            --card-border: #2c3235;
+            --text-main: #cdd9e5;
+            --text-muted: #8e959b;
+            --accent-temp: #e24d42;
+            --accent-hum: #3274d9;
+            --accent-aq: #299c46;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 16px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--card-border);
+        }
+        h1 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 500;
+        }
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        select {
+            background-color: var(--bg);
+            color: var(--text-main);
+            border: 1px solid var(--card-border);
+            padding: 6px 12px;
+            border-radius: 2px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        select:focus {
+            outline: none;
+            border-color: #3274d9;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 4px;
+            padding: 16px;
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .header-left { display: flex; align-items: center; gap: 8px; }
+        .card h3 {
+            margin: 0;
+            font-size: 0.85rem;
+            color: var(--text-main);
+            font-weight: 500;
+        }
+        .device-badge {
+            font-size: 0.75rem;
+            background-color: rgba(255,255,255,0.05);
+            padding: 2px 6px;
+            border-radius: 2px;
+            color: var(--text-muted);
+        }
+        .status-dot {
+            height: 8px; width: 8px; border-radius: 50%; background-color: var(--text-muted); display: inline-block;
+        }
+        .status-online { background-color: var(--accent-aq); box-shadow: 0 0 5px var(--accent-aq); }
+        .status-offline { background-color: var(--accent-temp); }
+        .value-display {
+            font-size: 2.2rem;
+            font-weight: 500;
+            line-height: 1.2;
+        }
+        .val-temp { color: var(--accent-temp); }
+        .val-hum { color: var(--accent-hum); }
+        .val-aq { color: var(--accent-aq); }
+        .chart-container {
+            position: relative;
+            height: 250px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-row">
+        <h1>IoT Telemetry Dashboard</h1>
+        <div class="controls">
+            <label for="timeSelect">Time Range</label>
+            <select id="timeSelect">
+                <option value="1">Last 1 Minute</option>
+                <option value="5" selected>Last 5 Minutes</option>
+                <option value="15">Last 15 Minutes</option>
+                <option value="30">Last 30 Minutes</option>
+            </select>
+        </div>
+    </div>
+    
+    <div class="grid">
+        <div class="card">
+            <div class="card-header">
+                <div class="header-left">
+                    <h3>Temperature</h3>
+                    <span class="device-badge">Raspberry Pi</span>
+                </div>
+                <span class="status-dot" id="status-rasp"></span>
+            </div>
+            <div class="value-display val-temp" id="curr-temp">-- °C</div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="header-left">
+                    <h3>Humidity</h3>
+                    <span class="device-badge">Raspberry Pi</span>
+                </div>
+                <span class="status-dot" id="status-rasp-2"></span>
+            </div>
+            <div class="value-display val-hum" id="curr-hum">-- %</div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="header-left">
+                    <h3>Air Quality</h3>
+                    <span class="device-badge">Wemos D1</span>
+                </div>
+                <span class="status-dot" id="status-wemos"></span>
+            </div>
+            <div class="value-display val-aq" id="curr-aq">--</div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <div class="chart-container"><canvas id="tempChart"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="chart-container"><canvas id="humChart"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="chart-container"><canvas id="aqChart"></canvas></div>
+        </div>
+    </div>
+
+    <script>
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.defaults.color = '#8e959b';
+
+        const commonOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            spanGaps: true,
+            animation: { duration: 0 }, // Disable animation for professional raw data feel
+            plugins: { 
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(24, 27, 31, 0.9)',
+                    titleColor: '#cdd9e5',
+                    bodyColor: '#cdd9e5',
+                    borderColor: '#2c3235',
+                    borderWidth: 1,
+                    padding: 8,
+                    displayColors: false
+                }
+            },
+            scales: {
+                y: { 
+                    grid: { color: '#2c3235', drawBorder: false }, 
+                    ticks: { maxTicksLimit: 6 } 
+                },
+                x: { 
+                    grid: { display: false }, 
+                    ticks: { maxTicksLimit: 6, maxRotation: 0 } 
+                }
+            },
+            elements: {
+                line: { tension: 0, borderWidth: 1.5, spanGaps: true },
+                point: { radius: 0, hitRadius: 10, hoverRadius: 4, hoverBorderWidth: 2 }
+            }
+        };
+
+        const ctxTemp = document.getElementById('tempChart').getContext('2d');
+        const ctxHum = document.getElementById('humChart').getContext('2d');
+        const ctxAq = document.getElementById('aqChart').getContext('2d');
+
+        const createDataset = (color, bgColor) => ({
+            data: [],
+            borderColor: color,
+            backgroundColor: bgColor,
+            fill: true,
+        });
+
+        const tempChart = new Chart(ctxTemp, { type: 'line', options: commonOptions, data: { rawTimestamps: [], labels: [], datasets: [createDataset('#e24d42', 'rgba(226, 77, 66, 0.05)')] }});
+        const humChart = new Chart(ctxHum, { type: 'line', options: commonOptions, data: { rawTimestamps: [], labels: [], datasets: [createDataset('#3274d9', 'rgba(50, 116, 217, 0.05)')] }});
+        const aqChart = new Chart(ctxAq, { type: 'line', options: commonOptions, data: { rawTimestamps: [], labels: [], datasets: [createDataset('#299c46', 'rgba(41, 156, 70, 0.05)')] }});
+
+        let lastId = 0;
+        let isFirstLoad = true;
+        let latestRaspTime = 0;
+        let latestWemosTime = 0;
+
+        const updateStatusDot = (id, lastTime) => {
+            const dot = document.getElementById(id);
+            if (!lastTime || (Date.now() - lastTime > 15000)) {
+                dot.className = 'status-dot status-offline';
+            } else {
+                dot.className = 'status-dot status-online';
+            }
+        };
+
+        async function fetchDelta() {
+            try {
+                const minutes = parseInt(document.getElementById('timeSelect').value);
+                const url = isFirstLoad ? `/api/data?minutes=${minutes}` : `/api/data?last_id=${lastId}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                const cutoff = Date.now() - (minutes * 60000);
+                let latestTemp = null, latestHum = null, latestAq = null;
+
+                data.forEach(d => {
+                    lastId = Math.max(lastId, d.id);
+                    const timeObj = new Date(d.timestamp + "Z");
+                    const timeStr = timeObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    const timestampMs = timeObj.getTime();
+                    
+                    const updateChart = (chart, val) => {
+                        chart.data.rawTimestamps.push(timestampMs);
+                        chart.data.labels.push(timeStr);
+                        chart.data.datasets[0].data.push(val);
+                    };
+
+                    if (d.device_id === 'raspberry') {
+                        latestRaspTime = Math.max(latestRaspTime, timestampMs);
+                        updateChart(tempChart, d.temperature);
+                        updateChart(humChart, d.humidity);
+                        updateChart(aqChart, null);
+                        if (d.temperature !== null) latestTemp = d.temperature;
+                        if (d.humidity !== null) latestHum = d.humidity;
+                    } else if (d.device_id === 'wemos') {
+                        latestWemosTime = Math.max(latestWemosTime, timestampMs);
+                        updateChart(tempChart, null);
+                        updateChart(humChart, null);
+                        updateChart(aqChart, d.air_quality);
+                        if (d.air_quality !== null) latestAq = d.air_quality;
+                    }
+                });
+
+                const pruneChart = (chart) => {
+                    while (chart.data.rawTimestamps.length > 0 && chart.data.rawTimestamps[0] < cutoff) {
+                        chart.data.rawTimestamps.shift();
+                        chart.data.labels.shift();
+                        chart.data.datasets[0].data.shift();
+                    }
+                };
+                
+                pruneChart(tempChart);
+                pruneChart(humChart);
+                pruneChart(aqChart);
+
+                if (latestTemp !== null) document.getElementById('curr-temp').innerText = latestTemp.toFixed(1) + ' °C';
+                if (latestHum !== null) document.getElementById('curr-hum').innerText = latestHum.toFixed(1) + ' %';
+                if (latestAq !== null) document.getElementById('curr-aq').innerText = latestAq.toFixed(0);
+
+                updateStatusDot('status-rasp', latestRaspTime);
+                updateStatusDot('status-rasp-2', latestRaspTime);
+                updateStatusDot('status-wemos', latestWemosTime);
+
+                if (data.length > 0 || !isFirstLoad) {
+                    tempChart.update();
+                    humChart.update();
+                    aqChart.update();
+                }
+
+                isFirstLoad = false;
+            } catch (err) {
+                console.error("Error fetching data", err);
+            }
+        }
+
+        document.getElementById('timeSelect').addEventListener('change', () => {
+            isFirstLoad = true;
+            lastId = 0;
+            const resetChart = chart => { chart.data.rawTimestamps = []; chart.data.labels = []; chart.data.datasets[0].data = []; };
+            resetChart(tempChart); resetChart(humChart); resetChart(aqChart);
+            fetchDelta();
+        });
+
+        setInterval(fetchDelta, 2000);
+        fetchDelta();
+    </script>
+</body>
+</html>
