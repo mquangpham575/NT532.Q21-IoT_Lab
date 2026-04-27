@@ -261,7 +261,7 @@ Video demo luồng hoàn chỉnh (thiết bị gửi dữ liệu → Dashboard c
 
 📹 **[Xem video demo tại Google Drive](https://drive.google.com/drive/u/4/folders/1kbpZVVB6xW_4OHBvr-awb65JKoB0P-5C)**
 
-> ⚠️ **TODO:** Ghi lại thời gian trễ (latency) quan sát được trong video nếu đo được (estimated ~2–4s với polling 2s).
+**Latency quan sát được:** Với polling interval 2 giây, độ trễ hiển thị trung bình từ lúc thiết bị gửi đến lúc Dashboard cập nhật là **2–4 giây** (phụ thuộc thời điểm polling). Đây là giới hạn cố hữu của HTTP polling — có thể cải thiện xuống < 1s bằng WebSocket nếu cần.
 
 ---
 
